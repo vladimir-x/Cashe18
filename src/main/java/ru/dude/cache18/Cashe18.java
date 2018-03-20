@@ -7,10 +7,16 @@ import java.util.PriorityQueue;
 import java.util.concurrent.*;
 
 /**
+ * Потокобезопасный кэш с фукнцией самоочистки.
+ * Поддерживает вставку вычисляемых (Callable) значений.
+ * При очистке удаляются наиболее старые и редко используемые элементы.
+ *
+ * TODO: Нет защиты от мнгновенного переполнения (OutOfMemryException).
+ * TODO: Нет ручного переопределения функции сравнения элементов кэша на устаревание.
+ *
+ * Демонстрационный вариант. Для использования в реальных проектах, пока не пригоден.
  */
 public class Cashe18 {
-
-    private static final Long CLEARED_HOUR = 1L;
 
     public static final Long DEFAULT_MAX_SIZE = 50000L;
 
@@ -27,8 +33,16 @@ public class Cashe18 {
      * Очистка
      * Clear
      */
+
+    // настройка очистки
+    private final TimeUnit clearedTimeUnit;
+    // настройка очистки
+    private final Long clearedPeriod;
+
+    // блокировщик для очистки
     private final CasheLocker cleanLock = new CasheLocker();
 
+    // шедулер для очистки
     private final ScheduledExecutorService cleanService = Executors.newSingleThreadScheduledExecutor();
 
     /**
@@ -43,19 +57,33 @@ public class Cashe18 {
      */
     private final Long maxSize;
 
+    /**
+     * Конструктор по умолчанию
+     */
     public Cashe18() {
-        this.maxSize = UNBOUNDED_SIZE;
+        this.clearedTimeUnit = TimeUnit.HOURS;
+        this.clearedPeriod = 1L;
+        this.maxSize = DEFAULT_MAX_SIZE;
         makeCleanTask();
     }
 
-    public Cashe18(Long maxSize) {
+    /**
+     * Коснтруктор с настройками
+     * @param maxSize - максимальыйн размер кэша. -1 = не ограничено
+     * @param clearTimeUnit - еденица времени для расписания очистки
+     * @param clearPeriod - период времени  для расписания очистки
+     */
+    public Cashe18(Long maxSize,TimeUnit clearTimeUnit,Long clearPeriod) {
+        this.clearedTimeUnit = clearTimeUnit;
+        this.clearedPeriod = clearPeriod;
         this.maxSize = maxSize;
         makeCleanTask();
     }
 
 
     /**
-     * put or rewrite
+     * Поместить или перезаписать
+     * Put or rewrite
      * @param key
      * @param value
      * @param <E>
@@ -72,6 +100,7 @@ public class Cashe18 {
     }
 
     /**
+     * Поместить если такого key не существовало
      * Put only if not exist
      * @param key
      * @param value
@@ -89,7 +118,8 @@ public class Cashe18 {
     }
 
     /**
-     * put or rewrite
+     * Поместить или перезаписать
+     * Put or rewrite
      *
      * @param key
      * @param callable
@@ -111,6 +141,7 @@ public class Cashe18 {
 
 
     /**
+     * Поместить если такого key не существовало
      * Put only if not exist
      *
      * @param key
@@ -129,6 +160,7 @@ public class Cashe18 {
     }
 
     /**
+     * ПОлучить значение по ключу key. Возвращает null если значения не существовало или вычисление было прервано.
      * get value or null if not exist, or execution has been canselled
      *
      * @param key
@@ -153,7 +185,9 @@ public class Cashe18 {
         }
     }
 
-
+    /**
+     * Задача для очистки
+     */
     private void makeCleanTask() {
         if (maxSize != UNBOUNDED_SIZE) {
             Runnable runnable = new Runnable() {
@@ -167,11 +201,14 @@ public class Cashe18 {
                 }
             };
 
-            cleanService.scheduleWithFixedDelay(runnable, CLEARED_HOUR, CLEARED_HOUR, TimeUnit.HOURS);
+            cleanService.scheduleWithFixedDelay(runnable, clearedPeriod, clearedPeriod, clearedTimeUnit);
 
         }
     }
 
+    /**
+     * Метод очистки
+     */
     private void promptClear() {
         if (maxSize != UNBOUNDED_SIZE) {
             cleanLock.lock();
@@ -197,6 +234,10 @@ public class Cashe18 {
     }
 
 
+    /**
+     * Вывод содержимого кэша
+     * @param ps
+     */
     public void printAll(PrintStream ps) {
         Iterator<Map.Entry<String, CashedItem>> it = hashMap.entrySet().iterator();
         while (it.hasNext()) {
@@ -215,10 +256,18 @@ public class Cashe18 {
         }
     }
 
+    /**
+     * Размер кэша
+     * @return
+     */
     public int getSize(){
         return hashMap.size();
     }
 
+    /**
+     * Уничтожает внутренние объекты
+     * Destroy inner objects
+     */
     public void terminate() {
         futureExecutor.shutdownNow();
         cleanService.shutdownNow();

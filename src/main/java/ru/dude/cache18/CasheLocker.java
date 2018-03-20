@@ -15,6 +15,7 @@ public class CasheLocker {
 
     /**
      * Блокирует поток, если установлена блокировка
+     * Block thread if lock is enable
      */
     public void awaitIfLock(){
         if (isLock.get()){
@@ -24,6 +25,7 @@ public class CasheLocker {
 
     /**
      * Устанавливает блокировку
+     * Set lock
      */
     public void lock(){
         isLock.set(true);
@@ -32,6 +34,7 @@ public class CasheLocker {
 
     /**
      * Снимает блокировку, возобновляет все потоки, заблокированные во время блокировки
+     * Release lock and resume all waiting threads
      */
     public void release(){
         if (isLock.get()) {
@@ -42,6 +45,7 @@ public class CasheLocker {
 
     /**
      * Уничтожает внутренние объекты
+     * Destroy inner objects
      */
     public void terminate() {
         phaser.forceTermination();
